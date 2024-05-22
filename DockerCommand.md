@@ -363,7 +363,7 @@ rw   read write
 
 
 
-## Dockerfile
+## Dockerfile简单介绍
 
 **Dockerfile是用来构建docker镜像的构建文件** ===>命令脚本
 
@@ -460,3 +460,339 @@ docker run -d -p 3320:3306 -e MYSQL_ROOT_PASSWORD=123456 --name mysql02 --volume
 # 即可实现容器数据同步
 ```
 
+
+
+
+
+# Dockerfile
+
+dockerfile是用来构建docker镜像的文件 即命令行参数脚本
+
+```shell
+编写dockerfile文件->使用docker build 构建成一个镜像->docker run 运行容器->docker push发布镜像
+```
+
+很多 官方镜像是基础版，很多功能都没有，使用时一般搭建自己的镜像
+
+
+
+## Dockerfile 构建过程
+
+* 每个指令都是大写字母
+
+* 从上到下顺序执行
+
+* 使用#表示注释
+
+* 每个指令都创建提交一个新的镜像层，并且提交
+
+  
+
+
+
+## DockerFile 基础命令
+
+```shell
+FROM			# 基础镜像，从这里构建
+MAINTAINER		# 镜像是谁写的
+RUN				# 镜像构建时需要的命令
+ADD				# 添加内容 比如Tomcat压缩包
+WORKDIR			# 镜像的工作目录
+VOLUME			# 挂载目录
+EXPOSE			# 暴露端口
+CMD				# 指定容器启动运行的命令，只有最后一个会生效
+ENTRYPOINT		# 指定容器启动运行的命令，可以追加命令
+ONBUILD			# 构建一个继承DockerFile时会运行。   触发指令
+COPY			# 类似ADD，将文件拷贝到镜像
+ENV				# 构建时设置环境变量
+```
+
+
+
+## 使用DockerFile构建自己的centos
+
+
+
+```shell
+# 编写dockerfile文件
+FROM centos
+
+MAINTAINER cedric<ceddric1108@126.com>
+
+ENV MYPATH /user/local    # 工作目录
+
+WORKDIR $MYPATH
+
+RUN yum -y install vim
+RUN yum -y install net-tools
+
+EXPOSE 80
+
+CMD echo $MYPATH
+CMD echo "-------end-------"
+CMD /bin/bash
+
+
+# 使用docker build 构建
+docker build -f mydockerfile-centos -t mycentos:0.1 .
+
+# 成功
+[root@iZbp1ibhafma1zroo3wos1Z dockerfile]# docker images
+REPOSITORY            TAG       IMAGE ID       CREATED          SIZE                                                                                                
+mycentos              0.1       92abeee8cca7   21 seconds ago   727MB
+
+
+# 测试运行
+docker run -it mycentos:0.1 
+
+#使用 docker history 92abeee8cca7 查看构建历史
+IMAGE          CREATED          CREATED BY                                      SIZE      COMMENT
+92abeee8cca7   9 minutes ago    CMD ["/bin/sh" "-c" "/bin/bash"]                0B        buildkit.dockerfile.v0
+<missing>      9 minutes ago    CMD ["/bin/sh" "-c" "echo \"-------end------…   0B        buildkit.dockerfile.v0
+<missing>      9 minutes ago    CMD ["/bin/sh" "-c" "echo $MYPATH"]             0B        buildkit.dockerfile.v0
+<missing>      9 minutes ago    EXPOSE map[80/tcp:{}]                           0B        buildkit.dockerfile.v0
+<missing>      9 minutes ago    RUN /bin/sh -c yum -y install net-tools # bu…   217MB     buildkit.dockerfile.v0
+<missing>      9 minutes ago    RUN /bin/sh -c yum -y install vim # buildkit    306MB     buildkit.dockerfile.v0
+<missing>      10 minutes ago   WORKDIR /user/local                             0B        buildkit.dockerfile.v0
+<missing>      10 minutes ago   ENV MYPATH=/user/local                          0B        buildkit.dockerfile.v0
+<missing>      10 minutes ago   MAINTAINER cedric<ceddric1108@126.com>          0B        buildkit.dockerfile.v0
+<missing>      2 years ago      /bin/sh -c #(nop)  CMD ["/bin/bash"]            0B        
+<missing>      2 years ago      /bin/sh -c #(nop)  LABEL org.label-schema.sc…   0B        
+<missing>      2 years ago      /bin/sh -c #(nop) ADD file:b3ebbe8bd304723d4…   204MB    
+```
+
+ 
+
+## 使用DockerFile构建自己的Tomcat
+
+1、准备镜像文件--Tomcat压缩包--jdk压缩包
+
+2、编写dockerfile文件，官方命名`Dockerfile`  ，build时自动寻找，不需要 `-f` 指定
+
+```shell
+FROM centos:7
+MAINTAINER cedric<cedric1108@126.com>
+
+COPY readme.txt /usr/local/readme.txt
+
+ADD apache-tomcat-9.0.89.tar.gz /usr/local/
+ADD jdk-8u411-linux-x64.tar.gz /usr/local/
+
+RUN yum -y install vim
+
+ENV MYPATH /usr/local
+WORKDIR $MYPATH
+
+ENV JAVA_HOME /usr/local/jdk1.8.0_411
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+
+ENV CATALINA_HOME /usr/local/apache-tomcat-9.0.89
+ENV CATALINA_BASH /usr/local/apache-tomcat-9.0.89
+
+ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
+
+EXPOSE 8080
+
+CMD /usr/local/apache-tomcat-9.0.89/bin/startup.sh && tail -F /usr/local/apache-tomcat-9.0.89/bin/logs/catalina.out
+```
+
+3、构建镜像
+
+```shell
+docker build -t cedricstomcat .
+```
+
+4、启动容器，设施挂载目录
+
+```shell
+docker run -d -p 9090:8080 --name diytomcat -v /home/cedric/build/tomcat/test:/usr/local/apache-tomcat-9.0.89/webapps/test -v /home/cedric/build/tomcat/tomcatlogs/:/usr/local/apache-tomcat-9.0.89/logs cedricstomcat
+```
+
+5、进入容器，启动测试
+
+```shell
+[root@iZbp1ibhafma1zroo3wos1Z tomcat]# docker exec -it 03a73b6db652 /bin/bash
+[root@03a73b6db652 local]# pwd
+/usr/local
+[root@03a73b6db652 local]# ll
+total 52
+drwxr-xr-x 1 root root 4096 May 22 09:31 apache-tomcat-9.0.89
+drwxr-xr-x 2 root root 4096 Apr 11  2018 bin
+drwxr-xr-x 2 root root 4096 Apr 11  2018 etc
+drwxr-xr-x 2 root root 4096 Apr 11  2018 games
+drwxr-xr-x 2 root root 4096 Apr 11  2018 include
+drwxr-xr-x 8 root root 4096 May 22 09:32 jdk1.8.0_411
+drwxr-xr-x 2 root root 4096 Apr 11  2018 lib
+drwxr-xr-x 2 root root 4096 Apr 11  2018 lib64
+drwxr-xr-x 2 root root 4096 Apr 11  2018 libexec
+-rw-r--r-- 1 root root    0 May 22 09:31 readme.txt
+drwxr-xr-x 2 root root 4096 Apr 11  2018 sbin
+drwxr-xr-x 5 root root 4096 Nov 13  2020 share
+drwxr-xr-x 2 root root 4096 Apr 11  2018 src
+```
+
+6、使用卷挂载，即可在本地目录编写代码
+
+
+
+## 在Docker Hub发布自己的镜像
+
+```shell
+# 登录
+docker login
+		-u		# username
+		-p		# password
+
+# 登陆后即可push
+docker push
+```
+
+
+
+# Dockers网络
+
+## Docker0
+
+```shell
+# ip addr 查看网络
+```
+
+![image-20240522185033791](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522185033791.png)
+
+有三个网络
+
+> 原理
+
+**1、每启动一个docker容器，docker都会给docker容器分配一个ip。只要安装docker就会拥有一个网卡 `docker0` 。使用桥接模式，技术是 `veth-pair`**
+
+![image-20240522190843429](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522190843429.png)
+
+**新增的一对网卡就是容器内的网卡**
+
+```shell
+# 容器带来的新增网卡成对出现
+# veth-pair技术 就是一对虚拟设备接口，成对出现  一端连接协议，一端彼此相连
+# 使得veth-pair充当桥梁，连接各种网络设备  
+```
+
+测试发现：容器之间是可以ping通的
+
+**原理如下**
+
+
+
+![6d68a91073e9191d6f5c084b4f73b14](C:\Users\cedric\Documents\WeChat Files\wxid_jjeageo0quzq22\FileStorage\Temp\6d68a91073e9191d6f5c084b4f73b14.jpg)
+
+tomcat01和tomcat02共同使用同一个路由器 ---> docker0 
+
+使用的容器在不指定网络情况下，都是由docker0路由，docker会给分配一个默认的可用IP
+
+> 总结：Docker中使用了Linux中的桥接技术。 Docker里面所有的网络接口都是虚拟的，因为虚拟的转发效率高。（内网传递文件）
+
+
+
+## 自定义网络
+
+> 查看所有docker网络
+
+![image-20240522215641548](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522215641548.png)
+
+**网络模式**
+
+bridge：桥接 docker（默认，自己创建也使用）
+
+none：不配置网络
+
+host：和宿主机共享网络
+
+container：容器内网络连通（少用）
+
+**测试**
+
+```shell
+# 直接启动容器时  默认命令 --net brige (docker0)
+docker run -d -P --name tomcat01 --net bridge tomcat
+
+# docker0特点:域名不可以访问，需要使用--link打通连接
+
+# 自定义网络
+# --driver bridge
+# --subnet 192.168.0.0/16  	子网
+# --gateway 192.168.0.1 	网关
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker network create --driver bridge --subnet 192.168.0.0/16 --gateway 192.168.0.1 mynet
+6304580283f1a3da384beeb01eec14f830d0a4547055428b655c96594c90de8d
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker network ls
+NETWORK ID     NAME      DRIVER    SCOPE
+88b346f068c1   bridge    bridge    local
+4344b58e1606   host      host      local
+6304580283f1   mynet     bridge    local
+3d91d88aaa66   none      null      local
+
+```
+
+![image-20240522220757667](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522220757667.png)
+
+创建两个容器使用自己创建的网络：
+
+```shell
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker run -d -P --name tomcat-net-01 --net mynet tomcat
+eba671133ec32da1e6959f614d13f476544553d09ecd6b74a70bfdfad68dec5c
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker run -d -P --name tomcat-net-02 --net mynet tomcat
+58484f314037ab2452675be2f5d1f89b93180be129885a3d3d8b46d3a6641542
+
+
+```
+
+使用`docker network inspect mynet`查看网络详情![image-20240522221102374](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522221102374.png)
+
+此时测试 ping 连接时，`docker exec -it tomcat-net-01 ping tomcat-net-02` 可以 ping 通，不需要 --link。
+
+> 自定义网络的docker可以帮助维护好对应的关系
+>
+> 好处：不同的集群使用不同的网络，保证集群是安全的。
+
+
+
+## 网络连通
+
+```shell
+docker network connect     # Connect a container to a network
+
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker network connect --help
+
+Usage:  docker network connect [OPTIONS] NETWORK CONTAINER
+
+Connect a container to a network
+
+Options:
+      --alias strings           Add network-scoped alias for the container
+      --driver-opt strings      driver options for the network
+      --ip string               IPv4 address (e.g., "172.30.100.104")
+      --ip6 string              IPv6 address (e.g., "2001:db8::33")
+      --link list               Add link to another container
+      --link-local-ip strings   Add a link-local address for the container
+
+```
+
+测试打通：
+
+```shell
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker network connect mynet tomcat01
+[root@iZbp1ibhafma1zroo3wos1Z ~]# docker network inspect mynet
+
+# 连通后将tomcat01加入mynet网络下
+```
+
+![image-20240522222423897](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522222423897.png)
+
+```shell
+# 也就是 一个容器 两个IP个地址
+```
+
+
+
+![image-20240522222712533](C:\Users\cedric\AppData\Roaming\Typora\typora-user-images\image-20240522222712533.png)
+
+
+
+> 此时 tomcat01 可以直接使用名字 ping 通 mynet 下的容器
